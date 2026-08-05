@@ -1,0 +1,91 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  userId           Int     @id
+  email            String  @unique
+  password         String
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String?
+}
+
+model Role {
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  permissions RolePermission[]
+  users       User[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model Permission {
+  id Int @id @default(autoincrement())
+
+  name  String           @unique
+  roles RolePermission[]
+}
+
+//chia ra thành mối quan hệ role - permission n-n để dễ scale permission hơn
+model RolePermission {
+  roleId       Int
+  permissionId Int
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id                Int              @id @default(autoincrement())
+  name              String?
+  roleId            Int
+  role              Role             @relation(fields: [roleId], references: [id])
+  account           Account?
+  createdSchedules  Scheduler[]      @relation("CreatedSchedules")
+  assignedSchedules TaskAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Scheduler {
+  id          Int       @id @default(autoincrement())
+  name        String
+  cron        String
+  timezone    String    @default("Asia/Ho_Chi_Minh")
+  isActive    Boolean   @default(false)
+  nextRunTime DateTime?
+  lastRunTime DateTime?
+  description String?
+
+  createdById Int
+  assignments TaskAssignment[]
+
+  createdBy User @relation("CreatedSchedules", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TaskAssignment {
+  id Int @id @default(autoincrement())
+
+  scheduleId Int
+  userId     Int
+
+  schedule Scheduler @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+
+  @@unique([scheduleId, userId])
+}
