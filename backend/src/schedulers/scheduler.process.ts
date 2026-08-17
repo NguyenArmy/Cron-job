@@ -56,10 +56,9 @@ export class SchedulerProcessor extends WorkerHost {
     );
 
     this.logger.log(
-      `Các user được giao: ${
-        scheduler.assignments.length > 0
-          ? scheduler.assignments.map((item) => item.userId).join(', ')
-          : 'Không có'
+      `Các user được giao: ${scheduler.assignments.length > 0
+        ? scheduler.assignments.map((item) => item.userId).join(', ')
+        : 'Không có'
       }`,
     );
 

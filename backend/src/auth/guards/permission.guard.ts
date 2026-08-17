@@ -15,7 +15,7 @@ import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
 export class PermissionGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(private readonly reflector: Reflector) { }
 
   canActivate(context: ExecutionContext): boolean {
     const requiredPermissions = this.reflector.getAllAndOverride<
@@ -25,9 +25,8 @@ export class PermissionGuard implements CanActivate {
     if (!requiredPermissions || requiredPermissions.length === 0) {
       return true;
     }
-
+    //lấy thông tin user từ request
     const request = context.switchToHttp().getRequest();
-
     const user = request.user as JwtPayload | undefined;
 
     if (!user || !user.permissions) {

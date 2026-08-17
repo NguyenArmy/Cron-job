@@ -13,6 +13,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { IsValidCron } from '../cron/is-valid-cron.validator';
 
 export class CreateSchedulerDto {
   @IsIn(['cron', 'schedule'])
@@ -26,6 +27,7 @@ export class CreateSchedulerDto {
   @ValidateIf((dto: CreateSchedulerDto) => dto.inputMode === 'cron')
   @IsString()
   @IsNotEmpty()
+  @IsValidCron()
   cron?: string;
 
   @IsString()
