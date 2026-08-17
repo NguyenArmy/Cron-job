@@ -2,6 +2,8 @@ import { Response } from 'express';
 
 export function setRefreshTokenCookie(res: Response, refreshToken: string) {
   res.cookie('refreshToken', refreshToken, {
+
+    //lưu trên trình duyệt, không cho phép truy cập từ JS
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',

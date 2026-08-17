@@ -1,4 +1,27 @@
 services:
+  postgres:
+    image: postgres:16
+    container_name: cron-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cron
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: cron-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
   minio:
     image: minio/minio:latest
     container_name: scheduler-minio
@@ -13,5 +36,24 @@ services:
       - minio-data:/data
     command: server /data --console-address ":9001"
 
+  mariadb:
+    image: mariadb:11
+    container_name: scheduler-mariadb
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpassword
+      MARIADB_DATABASE: cron_scheduler_mariadb
+      MARIADB_USER: cron_user
+      MARIADB_PASSWORD: cron_password
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
 volumes:
+  postgres-data:
+    external: true
+    name: 317b5d4c9f3706ba07fd85198f3cf4fd933333b064945021d7aafb1f9c503bee
+  redis-data:
   minio-data:
+  mariadb-data:

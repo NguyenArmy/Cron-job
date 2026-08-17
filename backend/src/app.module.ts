@@ -9,6 +9,10 @@ import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { SchedulersModule } from './schedulers/schedulers.module';
 import { BullModule } from '@nestjs/bullmq';
+import { MinioModule } from './minio/minio.module';
+import { FilesModule } from './files/files.module';
+import { MariaDbModule } from './mariadb/mariadb.module';
+import { BackupsModule } from './backups/backups.module';
 
 @Module({
   imports: [
@@ -19,6 +23,9 @@ import { BullModule } from '@nestjs/bullmq';
     RolesModule,
     PermissionsModule,
     SchedulersModule,
+    MinioModule,
+    BackupsModule,
+    MariaDbModule,
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -28,8 +35,9 @@ import { BullModule } from '@nestjs/bullmq';
         },
       }),
     }),
+    FilesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
