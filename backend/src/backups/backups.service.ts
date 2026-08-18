@@ -1,28 +1,58 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { randomUUID } from 'node:crypto';
 import { MariaDbService } from '../mariadb/mariadb.service';
 import {
-    BACKUP_QUEUE,
-    RUN_BACKUP_JOB,
+  BACKUP_QUEUE,
+  RUN_BACKUP_JOB,
 } from './backup.constants';
+
+
+type PendingBackupRun = {
+  id: string;
+  status: 'QUEUED' | 'RUNNING'
+}
+type BackupRunStatus = {
+  id: string;
+  status: string;
+  current_table: string | null;
+  requested_at: Date;
+  started_at: Date | null;
+  completed_at: Date | null;
+  error_message: string | null;
+};
+
+type BackupCheckpoint = {
+  source_table: string;
+  last_processed_id: number | string;
+  processed_count: number | string;
+  updated_at: Date;
+};
 
 @Injectable()
 export class BackupsService implements OnModuleInit {
-    constructor(
-        @InjectQueue(BACKUP_QUEUE)
-        private readonly backupQueue: Queue,
-        private readonly mariaDbService: MariaDbService,
-    ) { }
+  private readonly logger = new Logger(BackupsService.name)
+  constructor(
+    @InjectQueue(BACKUP_QUEUE)
+    private readonly backupQueue: Queue,
+    private readonly mariaDbService: MariaDbService,
 
-    async onModuleInit(): Promise<void> {
-        await this.ensureBackupMetadataTables();
-    }
+  ) { }
 
-    private async ensureBackupMetadataTables(): Promise<void> {
-        const statements = [
-            `
+  async onModuleInit(): Promise<void> {
+    await this.ensureBackupMetadataTables();
+    await this.findPendingBackups();
+  }
+
+  private async ensureBackupMetadataTables(): Promise<void> {
+    const statements = [
+      `
       CREATE TABLE IF NOT EXISTS backup_runs (
         id CHAR(36) NOT NULL,
         status VARCHAR(20) NOT NULL,
@@ -38,7 +68,7 @@ export class BackupsService implements OnModuleInit {
         INDEX idx_backup_runs_status (status)
       ) ENGINE=InnoDB
     `,
-            `
+      `
       CREATE TABLE IF NOT EXISTS backup_checkpoints (
         backup_id CHAR(36) NOT NULL,
         source_table VARCHAR(64) NOT NULL,
@@ -52,7 +82,7 @@ export class BackupsService implements OnModuleInit {
           ON DELETE CASCADE
       ) ENGINE=InnoDB
     `,
-            `
+      `
       CREATE TABLE IF NOT EXISTS roles (
         id INT NOT NULL,
         name VARCHAR(255) NOT NULL,
@@ -62,7 +92,7 @@ export class BackupsService implements OnModuleInit {
         UNIQUE KEY uq_roles_name (name)
       ) ENGINE=InnoDB
     `,
-            `
+      `
       CREATE TABLE IF NOT EXISTS permissions (
         id INT NOT NULL,
         name VARCHAR(255) NOT NULL,
@@ -70,7 +100,7 @@ export class BackupsService implements OnModuleInit {
         UNIQUE KEY uq_permissions_name (name)
       ) ENGINE=InnoDB
     `,
-            `
+      `
       CREATE TABLE IF NOT EXISTS role_permissions (
         role_id INT NOT NULL,
         permission_id INT NOT NULL,
@@ -83,7 +113,7 @@ export class BackupsService implements OnModuleInit {
           ON DELETE CASCADE
       ) ENGINE=InnoDB
     `,
-            `
+      `
       CREATE TABLE IF NOT EXISTS users (
         id INT NOT NULL,
         name VARCHAR(255) NULL,
@@ -95,7 +125,7 @@ export class BackupsService implements OnModuleInit {
           FOREIGN KEY (role_id) REFERENCES roles(id)
       ) ENGINE=InnoDB
     `,
-            `
+      `
       CREATE TABLE IF NOT EXISTS accounts (
         user_id INT NOT NULL,
         email VARCHAR(255) NOT NULL,
@@ -108,7 +138,7 @@ export class BackupsService implements OnModuleInit {
           ON DELETE CASCADE
       ) ENGINE=InnoDB
     `,
-            `
+      `
       CREATE TABLE IF NOT EXISTS schedulers (
         id INT NOT NULL,
         name VARCHAR(255) NOT NULL,
@@ -126,7 +156,7 @@ export class BackupsService implements OnModuleInit {
           FOREIGN KEY (created_by_id) REFERENCES users(id)
       ) ENGINE=InnoDB
     `,
-            `
+      `
       CREATE TABLE IF NOT EXISTS task_assignments (
         id INT NOT NULL,
         schedule_id INT NOT NULL,
@@ -142,42 +172,141 @@ export class BackupsService implements OnModuleInit {
           ON DELETE CASCADE
       ) ENGINE=InnoDB
     `,
-        ];
+    ];
 
-        for (const sql of statements) {
-            await this.mariaDbService.query(sql);
-        }
+    for (const sql of statements) {
+      await this.mariaDbService.query(sql);
     }
+  }
 
-    async requestBackup() {
-        const backupId = randomUUID();
+  //thêm backup vào queue để xử lý
+  private async enqueueBackup(backupId: string): Promise<void> {
+    await this.backupQueue.add(
+      RUN_BACKUP_JOB,
+      {
+        backupId,
+        requestedAt: new Date().toISOString(),
+      },
+      {
+        jobId: `backup-${backupId}`,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
+        },
+        removeOnComplete: 100,
+        removeOnFail: 100,
+      },
+    );
+  }
+  private async findPendingBackups(): Promise<void> {
+    const pendingBackups =
+      await this.mariaDbService.query<PendingBackupRun[]>(
+        `
+            SELECT id, status
+            FROM backup_runs
+            WHERE status IN (?, ?)
+            `,
+        ['QUEUED', 'RUNNING'],
+      );
 
+    this.logger.log(
+      `Tìm thấy ${pendingBackups.length} backup cần kiểm tra khi khởi động`,
+    );
+    for (const backup of pendingBackups) {
+      if (backup.status === 'RUNNING') {
         await this.mariaDbService.query(
-            'INSERT INTO backup_runs (id, status) VALUES (?, ?)',
-            [backupId, 'QUEUED'],
+          `
+      UPDATE backup_runs
+      SET status = ?, error_message = NULL
+      WHERE id = ?
+      `,
+          ['QUEUED', backup.id],
         );
 
-        await this.backupQueue.add(
-            RUN_BACKUP_JOB,
-            {
-                backupId,
-                requestedAt: new Date().toISOString(),
-            },
-            {
-                jobId: `backup-${backupId}`,
-                attempts: 3,
-                backoff: {
-                    type: 'exponential',
-                    delay: 5_000,
-                },
-                removeOnComplete: 100,
-                removeOnFail: 100,
-            },
+        this.logger.warn(
+          `Backup ${backup.id} bị gián đoạn, đã chuyển lại về QUEUED`,
         );
 
-        return {
-            backupId,
-            status: 'QUEUED',
-        };
+      }
+      //add backup vào queue để xử lý lại
+      await this.enqueueBackup(backup.id);
+      this.logger.log(`Đã đưa backup ${backup.id} trở lại backup-queue`);
+
+
     }
+  }
+  async getBackupStatus(backupId: string) {
+    const backupRuns =
+      await this.mariaDbService.query<BackupRunStatus[]>(
+        `
+      SELECT
+        id,
+        status,
+        current_table,
+        requested_at,
+        started_at,
+        completed_at,
+        error_message
+      FROM backup_runs
+      WHERE id = ?
+      `,
+        [backupId],
+      );
+
+    const backupRun = backupRuns[0];
+
+    if (!backupRun) {
+      throw new NotFoundException(`Không tìm thấy backup ${backupId}`);
+    }
+
+    const checkpoints =
+      await this.mariaDbService.query<BackupCheckpoint[]>(
+        `
+      SELECT
+        source_table,
+        last_processed_id,
+        processed_count,
+        updated_at
+      FROM backup_checkpoints
+      WHERE backup_id = ?
+      ORDER BY source_table ASC
+      `,
+        [backupId],
+      );
+
+    return {
+      backupId: backupRun.id,
+      status: backupRun.status,
+      currentTable: backupRun.current_table,
+      requestedAt: backupRun.requested_at,
+      startedAt: backupRun.started_at,
+      completedAt: backupRun.completed_at,
+      errorMessage: backupRun.error_message,
+      checkpoints: checkpoints.map((checkpoint) => ({
+        sourceTable: checkpoint.source_table,
+        lastProcessedId: Number(checkpoint.last_processed_id),
+        processedCount: Number(checkpoint.processed_count),
+        updatedAt: checkpoint.updated_at,
+      })),
+    };
+  }
+
+  async requestBackup() {
+    const backupId = randomUUID();
+
+    await this.mariaDbService.query(
+      'INSERT INTO backup_runs (id, status) VALUES (?, ?)',
+      [backupId, 'QUEUED'],
+    );
+
+    await this.enqueueBackup(backupId);
+
+    return {
+      backupId,
+      status: 'QUEUED',
+    };
+  }
+
+
 }

@@ -1,5 +1,7 @@
 import {
     Controller,
+    Get,
+    Param,
     Post,
     UseGuards,
 } from '@nestjs/common';
@@ -17,5 +19,11 @@ export class BackupsController {
     @Post()
     requestBackup() {
         return this.backupsService.requestBackup();
+    }
+    @Get(':backupId')
+    getBackupStatus(
+        @Param('backupId') backupId: string,
+    ) {
+        return this.backupsService.getBackupStatus(backupId);
     }
 }
