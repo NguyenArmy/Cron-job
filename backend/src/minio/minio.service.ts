@@ -33,6 +33,13 @@ export class MinioService implements OnModuleInit {
             await this.client.makeBucket(this.bucketName);
         }
     }
+    async ping(): Promise<void> {
+        const bucketExists = await this.client.bucketExists(this.bucketName);
+
+        if (!bucketExists) {
+            throw new Error(`Không tìm thấy bucket ${this.bucketName}`);
+        }
+    }
 
     async uploadFile(
         objectName: string,

@@ -13,6 +13,7 @@ import { MinioModule } from './minio/minio.module';
 import { FilesModule } from './files/files.module';
 import { MariaDbModule } from './mariadb/mariadb.module';
 import { BackupsModule } from './backups/backups.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { BackupsModule } from './backups/backups.module';
     MinioModule,
     BackupsModule,
     MariaDbModule,
+    HealthModule,
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
