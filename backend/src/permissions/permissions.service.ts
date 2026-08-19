@@ -9,10 +9,10 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class PermissionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async create(createPermissionDto: CreatePermissionDto) {
-    const name = createPermissionDto.name.trim();
+    const name = createPermissionDto.name.trim().toLowerCase();
 
     try {
       return await this.prisma.permission.create({
@@ -47,7 +47,7 @@ export class PermissionsService {
     return this.prisma.permission.update({
       where: { id },
       data: updatePermissionDto.name
-        ? { name: updatePermissionDto.name.trim() }
+        ? { name: updatePermissionDto.name.trim().toLowerCase() }
         : {},
     });
   }
