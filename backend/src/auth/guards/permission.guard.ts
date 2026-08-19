@@ -29,7 +29,16 @@ export class PermissionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user as JwtPayload | undefined;
 
-    if (!user || !user.permissions) {
+    if (!user) {
+      throw new ForbiddenException('User chưa được xác thực');
+    }
+
+    // Role ADMIN mặc định có toàn quyền hệ thống
+    if (user.role === 'ADMIN') {
+      return true;
+    }
+
+    if (!user.permissions) {
       throw new ForbiddenException('User chưa được cấu hình permission');
     }
 

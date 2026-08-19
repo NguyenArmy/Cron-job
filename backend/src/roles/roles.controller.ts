@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   UseGuards,
+  ParseIntPipe
 } from '@nestjs/common';
 import { RolesService } from './roles.service';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -21,7 +22,7 @@ import { RequirePermission } from '../auth/decorators/permissions.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard)
 @Roles('ADMIN')
 export class RolesController {
-  constructor(private readonly rolesService: RolesService) {}
+  constructor(private readonly rolesService: RolesService) { }
 
   @Post()
   @RequirePermission('role:create')
@@ -37,19 +38,19 @@ export class RolesController {
 
   @Get(':id')
   @RequirePermission('role:read')
-  findOne(@Param('id') id: string) {
-    return this.rolesService.findOne(+id);
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.rolesService.findOne(id);
   }
 
   @Patch(':id')
   @RequirePermission('role:update')
-  update(@Param('id') id: string, @Body() updateRoleDto: UpdateRoleDto) {
-    return this.rolesService.update(+id, updateRoleDto);
+  update(@Param('id', ParseIntPipe) id: number, @Body() updateRoleDto: UpdateRoleDto) {
+    return this.rolesService.update(id, updateRoleDto);
   }
 
   @Delete(':id')
   @RequirePermission('role:delete')
-  remove(@Param('id') id: string) {
-    return this.rolesService.remove(+id);
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.rolesService.remove(id);
   }
 }

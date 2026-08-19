@@ -1,42 +1,56 @@
 import {
-  Controller,
-  Get,
-  Post,
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
-import { UsersService } from './users.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { PermissionGuard } from 'src/auth/guards/permission.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { RequirePermission } from 'src/auth/decorators/permissions.decorator';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UsersService } from './users.service';
 
 @Controller('users')
+@UseGuards(JwtAuthGuard, RolesGuard, PermissionGuard)
+@Roles('ADMIN')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
-
-  @Post()
-  create(@Body() createUserDto: CreateUserDto) {
-    return this.usersService.create(createUserDto);
-  }
+  constructor(private readonly usersService: UsersService) { }
 
   @Get()
+  @RequirePermission('user:read')
   findAll() {
     return this.usersService.findAll();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.usersService.findOne(+id);
+  @RequirePermission('user:read')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(+id, updateUserDto);
+  @RequirePermission('user:update')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return this.usersService.update(id, updateUserDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.usersService.remove(+id);
+  @RequirePermission('user:delete')
+  remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() request: { user: JwtPayload },
+  ) {
+    return this.usersService.remove(id, request.user.sub);
   }
 }
